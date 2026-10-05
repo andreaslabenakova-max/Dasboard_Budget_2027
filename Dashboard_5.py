@@ -21,6 +21,7 @@ Instalace:
 """
 
 from pathlib import Path
+import json
 import re
 import webbrowser
 from datetime import datetime
@@ -110,6 +111,21 @@ DEFICIT_VYSKA = 470
 
 # Kolik posledních let zobrazit v grafu deficitu
 DEFICIT_POCET_LET = 10
+
+
+# ============================================================
+# MOBILNÍ ZOBRAZENÍ
+#
+# Pod touto šířkou okna (px) se grafy přepnou do mobilní
+# úpravy: menší písmo, zkrácené legendy, méně popisků
+# a vypnuté přibližování tahem prstu.
+# ============================================================
+
+MOBIL_SIRKA = 650
+
+# Maximální délka názvu v legendě donutu na mobilu
+# (plný název zůstává v bublině po klepnutí)
+MOBIL_LEGENDA_ZNAKU = 38
 
 
 # ============================================================
@@ -279,6 +295,37 @@ def format_cislo_znamenko(value, desetinna_mista=1):
         return "−" + text
 
     return text
+
+
+# ============================================================
+# ZKRÁCENÍ NÁZVŮ (legenda donutu na mobilu)
+#
+# Dlouhé názvy se zkrátí a doplní "…". Názvy musí zůstat
+# různé (Plotly by stejné názvy sloučil do jedné výseče),
+# proto se případné duplicity očíslují.
+# ============================================================
+
+def zkrat_nazvy(nazvy, max_znaku):
+
+    vysledek = []
+
+    for nazev in nazvy:
+
+        if len(nazev) <= max_znaku:
+            kratky = nazev
+        else:
+            kratky = nazev[:max_znaku - 1].rstrip(" ,;–-") + "…"
+
+        zaklad = kratky
+        n = 2
+
+        while kratky in vysledek:
+            kratky = f"{zaklad} ({n})"
+            n += 1
+
+        vysledek.append(kratky)
+
+    return vysledek
 
 
 # ============================================================
@@ -1425,7 +1472,28 @@ body {
 @media (max-width: 650px) {
 
     .dashboard {
-        padding: 18px;
+        padding: 12px;
+    }
+
+    .title {
+        font-size: 24px;
+    }
+
+    .panel {
+        padding: 8px;
+    }
+
+    .card-value {
+        font-size: 22px;
+    }
+
+    /* Lišta nástrojů Plotly na mobilu jen překáží */
+    .modebar-container {
+        display: none !important;
+    }
+
+    .footer {
+        display: block;
     }
 
     .cards {
@@ -1479,10 +1547,13 @@ def create_donut(
     labels = list(labels)
 
     # Text bubliny po najetí myší – hotový řetězec pro každou výseč
+    # (plný název je přímo v textu bubliny, aby zůstal celý
+    #  i na mobilu, kde je název v legendě zkrácený)
     hover_texty = [
+        f"<b>{l}</b><br>"
         f"Částka: {format_cislo(v, 2)} mld. Kč<br>"
         f"Podíl: {format_procento(p)}"
-        for v, p in zip(values, shares)
+        for l, v, p in zip(labels, values, shares)
     ]
 
     # Procenta do výsečí – u malých výsečí (< 2 %) se nic nepíše
@@ -1532,7 +1603,6 @@ def create_donut(
             hovertext=hover_texty,
 
             hovertemplate=(
-                "<b>%{label}</b><br>"
                 "%{hovertext}"
                 "<extra></extra>"
             )
@@ -1609,7 +1679,25 @@ def create_donut(
             font=dict(size=velikost, color=TEXT, family="Segoe UI")
         )
 
-    return fig
+    # ========================================================
+    # PŘEPNUTÍ DESKTOP / MOBIL
+    # ========================================================
+
+    prepinani = {
+        "desktop": {
+            "data": {"labels": [labels], "textfont.size": 14},
+            "layout": {"legend.font.size": 14, "title.font.size": 17}
+        },
+        "mobil": {
+            "data": {
+                "labels": [zkrat_nazvy(labels, MOBIL_LEGENDA_ZNAKU)],
+                "textfont.size": 11
+            },
+            "layout": {"legend.font.size": 11, "title.font.size": 15}
+        }
+    }
+
+    return fig, prepinani
 
 
 # ============================================================
@@ -1713,7 +1801,55 @@ def create_deficit_chart(deficit):
 
     )
 
-    return fig
+    # ========================================================
+    # PŘEPNUTÍ DESKTOP / MOBIL
+    #   mobil: celá čísla, svislé popisky, menší písmo,
+    #          roky natočené, větší rezerva na ose
+    # ========================================================
+
+    rezerva_mobil = rozpeti * 0.20
+
+    prepinani = {
+        "desktop": {
+            "data": {
+                "text": [popisky],
+                "textangle": "auto",
+                "textfont.size": 11
+            },
+            "layout": {
+                "title.font.size": 17,
+                "margin.l": 60,
+                "margin.r": 20,
+                "margin.b": 45,
+                "xaxis.tickangle": "auto",
+                "xaxis.tickfont.size": 11,
+                "yaxis.tickfont.size": 11,
+                "yaxis.range": [minimum - rezerva, maximum + rezerva]
+            }
+        },
+        "mobil": {
+            "data": {
+                "text": [[format_cislo(v, 0) for v in deficit["saldo"]]],
+                "textangle": -90,
+                "textfont.size": 9
+            },
+            "layout": {
+                "title.font.size": 15,
+                "margin.l": 45,
+                "margin.r": 5,
+                "margin.b": 50,
+                "xaxis.tickangle": -90,
+                "xaxis.tickfont.size": 9,
+                "yaxis.tickfont.size": 9,
+                "yaxis.range": [
+                    minimum - rezerva_mobil,
+                    maximum + rezerva_mobil
+                ]
+            }
+        }
+    }
+
+    return fig, prepinani
 
 
 # ============================================================
@@ -1737,6 +1873,20 @@ def create_oze_chart(oze, vyska):
         format_procento(v)
         for v in oze["hodnoty"]
     ]
+
+    nadpis = (
+        "Podíl obnovitelných zdrojů na výrobě elektřiny"
+        f"<br><span style='font-size:11px;color:{TEXT_LIGHT}'>"
+        f"Země EU, {oze['obdobi']} • zdroj: Eurostat (nrg_cb_pem)"
+        "</span>"
+    )
+
+    nadpis_mobil = (
+        "Podíl obnovitelných zdrojů<br>na výrobě elektřiny"
+        f"<br><span style='font-size:10px;color:{TEXT_LIGHT}'>"
+        f"Země EU, {oze['obdobi']}<br>zdroj: Eurostat (nrg_cb_pem)"
+        "</span>"
+    )
 
     fig = go.Figure()
 
@@ -1791,12 +1941,7 @@ def create_oze_chart(oze, vyska):
     fig.update_layout(
 
         title=dict(
-            text=(
-                "Podíl obnovitelných zdrojů na výrobě elektřiny"
-                f"<br><span style='font-size:11px;color:{TEXT_LIGHT}'>"
-                f"Země EU, {oze['obdobi']} • zdroj: Eurostat (nrg_cb_pem)"
-                "</span>"
-            ),
+            text=nadpis,
             x=0,
             xanchor="left",
             font=dict(size=17, color=TEXT)
@@ -1832,7 +1977,37 @@ def create_oze_chart(oze, vyska):
 
     )
 
-    return fig
+    # ========================================================
+    # PŘEPNUTÍ DESKTOP / MOBIL
+    #   mobil: nadpis zalomený do více řádků, menší písmo
+    # ========================================================
+
+    prepinani = {
+        "desktop": {
+            "data": {"textfont.size": 11},
+            "layout": {
+                "title.text": nadpis,
+                "title.font.size": 17,
+                "margin.t": TITULEK_VYSKA + 35,
+                "margin.r": 55,
+                "xaxis.tickfont.size": 11,
+                "yaxis.tickfont.size": 12
+            }
+        },
+        "mobil": {
+            "data": {"textfont.size": 9},
+            "layout": {
+                "title.text": nadpis_mobil,
+                "title.font.size": 15,
+                "margin.t": TITULEK_VYSKA + 75,
+                "margin.r": 40,
+                "xaxis.tickfont.size": 9,
+                "yaxis.tickfont.size": 10
+            }
+        }
+    }
+
+    return fig, prepinani
 
 
 # ============================================================
@@ -2009,7 +2184,61 @@ def create_bezne_kapitalove_chart(vyska):
 
     )
 
-    return fig
+    # ========================================================
+    # PŘEPNUTÍ DESKTOP / MOBIL
+    #   mobil: hodnoty uvnitř sloupců se skryjí (jsou v bublině
+    #          po klepnutí), nad sloupcem zůstane jen součet
+    #          zaokrouhlený na celé mld. Kč, menší písmo
+    # ========================================================
+
+    anotace_desktop = [
+        a.to_plotly_json()
+        for a in fig.layout.annotations
+    ]
+
+    anotace_mobil = [
+        dict(
+            x=i,
+            y=c,
+            text=f"<b>{format_cislo(c, 0)}</b>",
+            showarrow=False,
+            yanchor="bottom",
+            yshift=3,
+            font=dict(size=10, color=TEXT, family=PISMO)
+        )
+        for i, c in enumerate(celkem)
+    ]
+
+    prepinani = {
+        "desktop": {
+            "data": {},
+            "layout": {
+                "annotations": anotace_desktop,
+                "title.font.size": 17,
+                "legend.font.size": 15,
+                "margin.l": 75,
+                "margin.t": TITULEK_VYSKA + 45,
+                "xaxis.tickfont.size": 14,
+                "yaxis.tickfont.size": 14,
+                "yaxis.title.font.size": 14
+            }
+        },
+        "mobil": {
+            "data": {},
+            "layout": {
+                "annotations": anotace_mobil,
+                "title.font.size": 15,
+                "legend.font.size": 12,
+                "margin.l": 50,
+                "margin.t": TITULEK_VYSKA + 30,
+                "xaxis.tickfont.size": 10,
+                "yaxis.tickfont.size": 10,
+                "yaxis.title.font.size": 11
+            }
+        }
+    }
+
+    return fig, prepinani
 
 
 # ============================================================
@@ -2272,7 +2501,7 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
     # GRAF VÝDAJŮ
     # ========================================================
 
-    fig_vydaje = create_donut(
+    fig_vydaje, prep_vydaje = create_donut(
         vydaje["values"],
         vydaje["labels"],
         vydaje["colors"],
@@ -2286,7 +2515,7 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
     # GRAF PŘÍJMŮ
     # ========================================================
 
-    fig_prijmy = create_donut(
+    fig_prijmy, prep_prijmy = create_donut(
         prijmy["values"],
         prijmy["labels"],
         prijmy["colors"],
@@ -2300,7 +2529,7 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
     # GRAF DEFICITU
     # ========================================================
 
-    fig_deficit = create_deficit_chart(deficit)
+    fig_deficit, prep_deficit = create_deficit_chart(deficit)
 
     # ========================================================
     # GRAFY V PRAVÉM SLOUPCI – STEJNÁ VÝŠKA JAKO DONUTY
@@ -2313,9 +2542,9 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
         + 30
     )
 
-    fig_oze = create_oze_chart(oze, vyska_donutu)
+    fig_oze, prep_oze = create_oze_chart(oze, vyska_donutu)
 
-    fig_bk = create_bezne_kapitalove_chart(vyska_donutu)
+    fig_bk, prep_bk = create_bezne_kapitalove_chart(vyska_donutu)
 
     # ========================================================
     # GRAF → HTML
@@ -2332,32 +2561,84 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
 
     graf_vydaje = fig_vydaje.to_html(
         full_html=False,
+        div_id="graf_vydaje",
         include_plotlyjs="cdn",
         config=plotly_config
     )
 
     graf_prijmy = fig_prijmy.to_html(
         full_html=False,
+        div_id="graf_prijmy",
         include_plotlyjs=False,
         config=plotly_config
     )
 
     graf_deficit = fig_deficit.to_html(
         full_html=False,
+        div_id="graf_deficit",
         include_plotlyjs=False,
         config=plotly_config
     )
 
     graf_oze = fig_oze.to_html(
         full_html=False,
+        div_id="graf_oze",
         include_plotlyjs=False,
         config=plotly_config
     )
 
     graf_bk = fig_bk.to_html(
         full_html=False,
+        div_id="graf_bk",
         include_plotlyjs=False,
         config=plotly_config
+    )
+
+    # ========================================================
+    # SKRIPT PRO PŘEPÍNÁNÍ DESKTOP / MOBIL
+    #
+    # Po načtení stránky a při změně velikosti okna (např.
+    # otočení telefonu) se každému grafu nastaví desktopová
+    # nebo mobilní úprava. Na mobilu se navíc vypne
+    # přibližování tahem prstu, aby šla stránka posouvat.
+    # ========================================================
+
+    prepinani = {
+        "graf_vydaje": prep_vydaje,
+        "graf_prijmy": prep_prijmy,
+        "graf_deficit": prep_deficit,
+        "graf_oze": prep_oze,
+        "graf_bk": prep_bk
+    }
+
+    skript_mobil = (
+        "<script>\n"
+        "(function () {\n"
+        "  var NASTAVENI = " + json.dumps(prepinani, ensure_ascii=False) + ";\n"
+        "  var HRANICE = " + str(MOBIL_SIRKA) + ";\n"
+        "  var stav = null;\n"
+        "  function nastav() {\n"
+        "    if (!window.Plotly) return;\n"
+        "    var mobil = window.innerWidth < HRANICE;\n"
+        "    var novy = mobil ? 'mobil' : 'desktop';\n"
+        "    if (novy === stav) return;\n"
+        "    stav = novy;\n"
+        "    Object.keys(NASTAVENI).forEach(function (id) {\n"
+        "      var div = document.getElementById(id);\n"
+        "      if (!div) return;\n"
+        "      var n = NASTAVENI[id][novy];\n"
+        "      var layout = Object.assign({}, n.layout, {dragmode: mobil ? false : 'zoom'});\n"
+        "      Plotly.update(div, n.data, layout);\n"
+        "    });\n"
+        "  }\n"
+        "  window.addEventListener('load', nastav);\n"
+        "  var casovac;\n"
+        "  window.addEventListener('resize', function () {\n"
+        "    clearTimeout(casovac);\n"
+        "    casovac = setTimeout(nastav, 200);\n"
+        "  });\n"
+        "})();\n"
+        "</script>\n"
     )
 
     # ========================================================
@@ -2560,6 +2841,8 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
     </div>
 
 </div>
+
+{skript_mobil}
 
 </body>
 
