@@ -106,6 +106,16 @@ TITULEK_VYSKA = 50      # horní okraj pro nadpis grafu
 RADEK_LEGENDY = 24      # výška jednoho řádku legendy (pro písmo 14)
 STRED_ODSTUP = 30       # rozestup řádků textu uprostřed donutu (px)
 
+# Nadpisy všech grafů: první řádek vždy ve stejné výšce
+# od horního okraje panelu (bez ohledu na to, jak velký
+# horní okraj graf má nebo kolik řádků nadpis má)
+TITULEK_POZICE = dict(
+    y=1,
+    yref="container",
+    yanchor="top",
+    pad=dict(t=14)
+)
+
 # Výška grafu deficitu
 DEFICIT_VYSKA = 470
 
@@ -126,6 +136,10 @@ MOBIL_SIRKA = 650
 # Maximální délka názvu v legendě donutu na mobilu
 # (plný název zůstává v bublině po klepnutí)
 MOBIL_LEGENDA_ZNAKU = 38
+
+# Výška grafů na mobilu (px) – aby nebyly příliš protáhlé
+MOBIL_VYSKA_BK = 420        # běžné a kapitálové výdaje
+MOBIL_VYSKA_DEFICIT = 380   # vývoj salda
 
 
 # ============================================================
@@ -1282,6 +1296,7 @@ body {
     border: 2px dashed #d0d4d6;
     box-shadow: none;
     background: #fafbfb;
+    padding: 16px 18px 14px 18px;
 }
 
 .card-volna .card-value {
@@ -1295,8 +1310,12 @@ body {
    KARTA S PODÍLEM OBSLUHY DLUHU
    ============================================================ */
 
+/* Silnější barevný okraj vlevo (5 px místo 1 px) by posunul
+   text doprava – vnitřní okraj se proto o 4 px zmenší,
+   aby texty začínaly stejně jako u ostatních karet */
 .card-nej {
     border-left: 5px solid #0055A0;
+    padding-left: 15px;
 }
 
 /* Ukazatel podílu (vodorovný proužek) */
@@ -1617,6 +1636,7 @@ def create_donut(
             text=title,
             x=0,
             xanchor="left",
+            **TITULEK_POZICE,
             font=dict(size=17, color=TEXT)
         ),
 
@@ -1764,6 +1784,7 @@ def create_deficit_chart(deficit):
             text="Vývoj salda státního rozpočtu",
             x=0,
             xanchor="left",
+            **TITULEK_POZICE,
             font=dict(size=17, color=TEXT)
         ),
 
@@ -1817,6 +1838,7 @@ def create_deficit_chart(deficit):
                 "textfont.size": 11
             },
             "layout": {
+                "height": DEFICIT_VYSKA,
                 "title.font.size": 17,
                 "margin.l": 60,
                 "margin.r": 20,
@@ -1834,6 +1856,7 @@ def create_deficit_chart(deficit):
                 "textfont.size": 9
             },
             "layout": {
+                "height": MOBIL_VYSKA_DEFICIT,
                 "title.font.size": 15,
                 "margin.l": 45,
                 "margin.r": 5,
@@ -1874,19 +1897,12 @@ def create_oze_chart(oze, vyska):
         for v in oze["hodnoty"]
     ]
 
-    nadpis = (
-        "Podíl obnovitelných zdrojů na výrobě elektřiny"
-        f"<br><span style='font-size:11px;color:{TEXT_LIGHT}'>"
-        f"Země EU, {oze['obdobi']} • zdroj: Eurostat (nrg_cb_pem)"
-        "</span>"
-    )
+    # Nadpis je vždy jen jednořádkový (víceřádkový nadpis Plotly
+    # usadí jinak než ostatní). Podtitulek se zdrojem je pod
+    # grafem v HTML – viz create_dashboard_html.
+    nadpis = "Podíl obnovitelných zdrojů na výrobě elektřiny"
 
-    nadpis_mobil = (
-        "Podíl obnovitelných zdrojů<br>na výrobě elektřiny"
-        f"<br><span style='font-size:10px;color:{TEXT_LIGHT}'>"
-        f"Země EU, {oze['obdobi']}<br>zdroj: Eurostat (nrg_cb_pem)"
-        "</span>"
-    )
+    nadpis_mobil = "Podíl OZE na výrobě elektřiny"
 
     fig = go.Figure()
 
@@ -1944,6 +1960,7 @@ def create_oze_chart(oze, vyska):
             text=nadpis,
             x=0,
             xanchor="left",
+            **TITULEK_POZICE,
             font=dict(size=17, color=TEXT)
         ),
 
@@ -1952,7 +1969,7 @@ def create_oze_chart(oze, vyska):
         height=vyska,
         autosize=True,
 
-        margin=dict(l=10, r=55, t=TITULEK_VYSKA + 35, b=35),
+        margin=dict(l=10, r=55, t=TITULEK_VYSKA + 20, b=35),
 
         separators=", ",
 
@@ -1979,7 +1996,7 @@ def create_oze_chart(oze, vyska):
 
     # ========================================================
     # PŘEPNUTÍ DESKTOP / MOBIL
-    #   mobil: nadpis zalomený do více řádků, menší písmo
+    #   mobil: kratší nadpis, menší písmo
     # ========================================================
 
     prepinani = {
@@ -1988,7 +2005,7 @@ def create_oze_chart(oze, vyska):
             "layout": {
                 "title.text": nadpis,
                 "title.font.size": 17,
-                "margin.t": TITULEK_VYSKA + 35,
+                "margin.t": TITULEK_VYSKA + 20,
                 "margin.r": 55,
                 "xaxis.tickfont.size": 11,
                 "yaxis.tickfont.size": 12
@@ -1999,7 +2016,7 @@ def create_oze_chart(oze, vyska):
             "layout": {
                 "title.text": nadpis_mobil,
                 "title.font.size": 15,
-                "margin.t": TITULEK_VYSKA + 75,
+                "margin.t": TITULEK_VYSKA + 20,
                 "margin.r": 40,
                 "xaxis.tickfont.size": 9,
                 "yaxis.tickfont.size": 10
@@ -2118,6 +2135,7 @@ def create_bezne_kapitalove_chart(vyska):
             text="Běžné a kapitálové výdaje",
             x=0,
             xanchor="left",
+            **TITULEK_POZICE,
             font=dict(size=17, color=TEXT)
         ),
 
@@ -2214,6 +2232,7 @@ def create_bezne_kapitalove_chart(vyska):
             "data": {},
             "layout": {
                 "annotations": anotace_desktop,
+                "height": vyska,
                 "title.font.size": 17,
                 "legend.font.size": 15,
                 "margin.l": 75,
@@ -2227,6 +2246,7 @@ def create_bezne_kapitalove_chart(vyska):
             "data": {},
             "layout": {
                 "annotations": anotace_mobil,
+                "height": MOBIL_VYSKA_BK,
                 "title.font.size": 15,
                 "legend.font.size": 12,
                 "margin.l": 50,
@@ -2542,7 +2562,9 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
         + 30
     )
 
-    fig_oze, prep_oze = create_oze_chart(oze, vyska_donutu)
+    # (o 22 px nižší – pod grafem je ještě řádek se zdrojem,
+    #  aby panel měl stejnou výšku jako donut vedle)
+    fig_oze, prep_oze = create_oze_chart(oze, vyska_donutu - 22)
 
     fig_bk, prep_bk = create_bezne_kapitalove_chart(vyska_donutu)
 
@@ -2802,6 +2824,10 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
             <div class="panel">
 
                 {graf_oze}
+
+                <div class="panel-subtitle">
+                    Země EU, {oze['obdobi']} • zdroj: Eurostat (nrg_cb_pem)
+                </div>
 
             </div>
 
