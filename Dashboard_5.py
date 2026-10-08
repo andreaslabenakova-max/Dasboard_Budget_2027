@@ -10,10 +10,27 @@ Po spuštění:
 
 se:
 
-1. načtou všechny tři Excel soubory (výdaje, příjmy, deficit),
+1. načtou všechny Excel soubory (výdaje, příjmy, deficit,
+   obnovitelné zdroje, výdaje na obranu),
 2. vytvoří interaktivní HTML dashboard,
 3. HTML se uloží,
 4. dashboard se automaticky otevře v prohlížeči.
+
+DONUTY (stejně jako v PNG pro Canvu)
+  Příjmy:
+    - položka 13 jako jedna výseč „Daně a poplatky z vybraných
+      činností a služeb“ (ROZPAD_13 = True -> rozpad na 132–138,
+      podpoložky se berou z bloku POD řádkem 13),
+    - navíc řádek 46 (nedaňové a kapitálové příjmy, transfery),
+    - položky pod SLOUCIT_POD % sloučené do „Ostatní daně a poplatky“,
+    - názvy bez čísel kódů.
+  Výdaje:
+    - malé položky skupiny 33–39 sloučené do
+      „Ostatní služby pro obyvatelstvo“, zbylé mají různé odstíny.
+  Obojí: procenta za názvem v legendě.
+
+OBRANA (stejně jako ve skriptu pro Canvu)
+  - Česko a USA – cesta k cíli NATO 5 % HDP do roku 2035.
 
 Instalace:
 
@@ -35,21 +52,19 @@ import plotly.graph_objects as go
 # SOUBORY
 # ============================================================
 
-SOUBOR_VYDAJE = Path(
-    r"C:\Users\SlabenakovaA\OneDrive - KPS CR\Plocha\Python\Rozpocet_Odvetvi.xlsx"
+SLOZKA = Path(
+    r"C:\Users\SlabenakovaA\OneDrive - KPS CR\Plocha\Python"
 )
 
-SOUBOR_PRIJMY = Path(
-    r"C:\Users\SlabenakovaA\OneDrive - KPS CR\Plocha\Python\Dane_Extrakt.xlsx"
-)
+SOUBOR_VYDAJE = SLOZKA / "Rozpocet_Odvetvi.xlsx"
 
-SOUBOR_DEFICIT = Path(
-    r"C:\Users\SlabenakovaA\OneDrive - KPS CR\Plocha\Python\Deficit.xlsx"
-)
+SOUBOR_PRIJMY = SLOZKA / "Dane_Extrakt.xlsx"
 
-SOUBOR_OZE = Path(
-    r"C:\Users\SlabenakovaA\OneDrive - KPS CR\Plocha\Python\nrg_cb_pem__custom_22895279_spreadsheet.xlsx"
-)
+SOUBOR_DEFICIT = SLOZKA / "Deficit.xlsx"
+
+SOUBOR_OZE = SLOZKA / "Obnovitelne_Zdroje.xlsx"
+
+SOUBOR_OBRANA = SLOZKA / "Vydaje_Obrana_.xlsx"
 
 SHEET_VYDAJE = "Výdaje 2027-odvětvové"
 
@@ -58,6 +73,8 @@ SHEET_PRIJMY = "Tab.1 - příjmy"
 SHEET_DEFICIT = "List1"
 
 SHEET_OZE = "Sheet 1"
+
+SHEET_OBRANA = "Vojenské výdaje"
 
 
 # ============================================================
@@ -76,6 +93,7 @@ VYSTUP = (
 
 MODRA = "#0055A0"
 CERVENA = "#E32219"
+CERVENA_2 = "#D13D41"     # ostatní sloupce v grafu obrany
 SVETLE_MODRA = "#98C3D0"
 ZELENA = "#B3C0A7"
 TMAVE_SEDA = "#535C55"
@@ -83,6 +101,10 @@ SEDA = "#2E808C"
 ZLATA = "#84754E"
 SVETLE_SEDA = "#8A8D8F"
 TMAVE_MODRA = "#142B53"
+SVETLE_ZLATA = "#C9B98F"  # nedaňové příjmy (řádek 46)
+
+# Odstíny pro položky skupiny 3 (služby pro obyvatelstvo) ve výdajích
+ODSTINY_SKUPINA3 = ["#98C3D0", "#5E97AB", "#C7DEE6", "#3E7487"]
 
 # Světlejší odstíny pro výhled (graf deficitu)
 SVETLE_CERVENA = "#F19A94"
@@ -95,6 +117,32 @@ TEXT = "#222222"
 TEXT_LIGHT = "#777777"
 LINE = "#D0D0D0"
 BACKGROUND = "#FFFFFF"
+
+
+# ============================================================
+# DONUTY – OBSAH (stejně jako v PNG pro Canvu)
+# ============================================================
+
+# Příjmy: položka 13 rozpadlá na podpoložky 132–138 (True),
+# nebo jako jedna výseč (False)
+ROZPAD_13 = False
+
+# Příjmy: nová položka – číslo řádku tak, jak ho ukazuje Excel
+RADEK_NOVA_POLOZKA = 46
+
+# Příjmy: položky menší než tolik % z celku se sloučí do jedné
+# výseče (jinak jsou v donutu neviditelné). 0 = nic neslučovat.
+SLOUCIT_POD = 1.0
+NAZEV_SLOUCENE = "Ostatní daně a poplatky"
+
+# Výdaje: položky skupiny 3 (33–39) menší než tolik % z celku
+# se sloučí do jedné výseče. 0 = nic neslučovat.
+VYDAJE_SLOUCIT_POD = 1.0
+VYDAJE_NAZEV_SLOUCENE = "Ostatní služby pro obyvatelstvo"
+
+# Procenta ve výsečích – u menších výsečí se nepíší
+# (jsou v legendě za názvem)
+DONUT_MIN_PODIL_TEXT = 2.0
 
 
 # ============================================================
@@ -124,6 +172,17 @@ DEFICIT_POCET_LET = 10
 
 
 # ============================================================
+# OBRANA
+# ============================================================
+
+OBRANA_CIL = 5.0            # cíl NATO (% HDP)
+OBRANA_CIL_ROK = 2035
+OBRANA_VYCHOZI_ROK = 2025   # sloupec v Excelu se stavem
+OBRANA_ZVYRAZNENY_ROK = 2027
+OBRANA_VYSKA = 470          # výška grafu obrany (px)
+
+
+# ============================================================
 # MOBILNÍ ZOBRAZENÍ
 #
 # Pod touto šířkou okna (px) se grafy přepnou do mobilní
@@ -140,6 +199,7 @@ MOBIL_LEGENDA_ZNAKU = 38
 # Výška grafů na mobilu (px) – aby nebyly příliš protáhlé
 MOBIL_VYSKA_BK = 420        # běžné a kapitálové výdaje
 MOBIL_VYSKA_DEFICIT = 380   # vývoj salda
+MOBIL_VYSKA_OBRANA = 380    # graf obrany
 
 
 # ============================================================
@@ -346,10 +406,10 @@ def zkrat_nazvy(nazvy, max_znaku):
 # FORMÁT PROCENTA
 # ============================================================
 
-def format_procento(value):
+def format_procento(value, desetinna_mista=1):
 
     return (
-        f"{value:.1f}"
+        f"{value:.{desetinna_mista}f}"
         .replace(".", ",")
         + " %"
     )
@@ -388,6 +448,47 @@ def prevod_cisla(x):
 
 
 # ============================================================
+# ODSTRANĚNÍ KÓDU ZE ZAČÁTKU NÁZVU
+#   '113 Daně ...'                    -> 'Daně ...'
+#   '122, 123, 124 Zvláštní daně ...' -> 'Zvláštní daně ...'
+# ============================================================
+
+def bez_kodu(text):
+
+    return re.sub(
+        r"^\s*\d+(?:\s*(?:,|a|-|–)\s*\d+)*\s*[.:\-–]?\s*",
+        "",
+        text
+    )
+
+
+# ============================================================
+# SLOUČENÍ MALÝCH POLOŽEK DO JEDNÉ VÝSEČE
+#
+# indexy  – které položky sloučit
+# Sloučená výseč se dá na místo poslední z nich.
+# ============================================================
+
+def sluc_polozky(values, labels, colors, codes, indexy, nazev, barva, kod):
+
+    soucet = sum(values[i] for i in indexy)
+    posledni = indexy[-1]
+
+    nove = []
+
+    for i, polozka in enumerate(zip(values, labels, colors, codes)):
+
+        if i == posledni:
+            nove.append((soucet, nazev, barva, kod))
+        elif i not in indexy:
+            nove.append(polozka)
+
+    values, labels, colors, codes = map(list, zip(*nove))
+
+    return values, labels, colors, codes
+
+
+# ============================================================
 # NAČTENÍ VÝDAJŮ
 # ============================================================
 
@@ -421,77 +522,77 @@ def load_vydaje():
         return float(value) / 1_000_000_000
 
     # ========================================================
-    # KÓDY
+    # KÓDY, NÁZVY, BARVY
     # ========================================================
 
-    codes_to_plot = [
-        1,
-        2,
-        "31 a 32",
-        33,
-        34,
-        35,
-        36,
-        37,
-        38,
-        39,
-        4,
-        5,
-        6
+    polozky = [
+        (1, "Zemědělství, lesní hospodářství a rybářství", MODRA),
+        (2, "Průmyslová a ostatní odvětví hospodářství", CERVENA),
+        ("31 a 32", "Vzdělávání a školské služby", SEDA),
+        (33, "Kultura, církve a sdělovací prostředky", SVETLE_MODRA),
+        (34, "Sport a zájmová činnost", SVETLE_MODRA),
+        (35, "Zdravotnictví", SVETLE_MODRA),
+        (36, "Bydlení, komunální služby a územní rozvoj", SVETLE_MODRA),
+        (37, "Ochrana životního prostředí", SVETLE_MODRA),
+        (38, "Ostatní výzkum a vývoj", SVETLE_MODRA),
+        (39, "Ostatní činnosti související se službami pro fyzické osoby", SVETLE_MODRA),
+        (4, "Sociální věci a politika zaměstnanosti", ZELENA),
+        (5, "Bezpečnost státu a právní ochrana", TMAVE_SEDA),
+        (6, "Všeobecná veřejná správa a služby", SVETLE_SEDA),
     ]
 
     # ========================================================
-    # NÁZVY
+    # HODNOTY (bez nul)
     # ========================================================
 
-    labels = [
-        "Zemědělství, lesní hospodářství a rybářství",
-        "Průmyslová a ostatní odvětví hospodářství",
-        "Vzdělávání a školské služby",
-        "Kultura, církve a sdělovací prostředky",
-        "Sport a zájmová činnost",
-        "Zdravotnictví",
-        "Bydlení, komunální služby a územní rozvoj",
-        "Ochrana životního prostředí",
-        "Ostatní výzkum a vývoj",
-        "Ostatní činnosti související se službami pro fyzické osoby",
-        "Sociální věci a politika zaměstnanosti",
-        "Bezpečnost státu a právní ochrana",
-        "Všeobecná veřejná správa a služby"
+    values, labels, colors, plot_codes = [], [], [], []
+
+    for kod, nazev, barva in polozky:
+
+        v = get_value(kod)
+
+        if v > 0:
+            values.append(v)
+            labels.append(nazev)
+            colors.append(barva)
+            plot_codes.append(kod)
+
+    # ========================================================
+    # SLOUČENÍ MALÝCH POLOŽEK SKUPINY 3 (33–39)
+    # ========================================================
+
+    skupina3 = (33, 34, 35, 36, 37, 38, 39)
+
+    celkem = sum(values)
+
+    male = [
+        i for i, k in enumerate(plot_codes)
+        if k in skupina3 and values[i] / celkem * 100 < VYDAJE_SLOUCIT_POD
     ]
 
-    # ========================================================
-    # HODNOTY
-    # ========================================================
+    if VYDAJE_SLOUCIT_POD > 0 and len(male) > 1:
 
-    values_all = np.array([
-        get_value(code)
-        for code in codes_to_plot
-    ])
+        print(f"  Výdaje – sloučeno do „{VYDAJE_NAZEV_SLOUCENE}“:")
+        for i in male:
+            print(f"    {format_cislo(values[i], 3):>8} mld. Kč  {labels[i]}")
 
-    # ========================================================
-    # ODSTRANĚNÍ NUL
-    # ========================================================
+        values, labels, colors, plot_codes = sluc_polozky(
+            values, labels, colors, plot_codes, male,
+            VYDAJE_NAZEV_SLOUCENE, ZLATA, "33–39 ostatní"
+        )
 
-    mask = values_all > 0
+    # Zbylé položky skupiny 3 dostanou různé odstíny modré
+    odstiny = iter(ODSTINY_SKUPINA3 * 3)
 
-    values = values_all[mask]
-
-    plot_codes = [
-        code
-        for code, keep in zip(codes_to_plot, mask)
-        if keep
-    ]
-
-    plot_labels = [
-        label
-        for label, keep in zip(labels, mask)
-        if keep
-    ]
+    for i, k in enumerate(plot_codes):
+        if k in skupina3:
+            colors[i] = next(odstiny)
 
     # ========================================================
     # CELKEM
     # ========================================================
+
+    values = np.array(values)
 
     total = values.sum()
 
@@ -500,34 +601,9 @@ def load_vydaje():
     else:
         shares = np.zeros_like(values)
 
-    # ========================================================
-    # BARVY
-    # ========================================================
-
-    color_map = {
-        1: MODRA,
-        2: CERVENA,
-        "31 a 32": SEDA,
-        33: SVETLE_MODRA,
-        34: SVETLE_MODRA,
-        35: SVETLE_MODRA,
-        36: SVETLE_MODRA,
-        37: SVETLE_MODRA,
-        38: SVETLE_MODRA,
-        39: SVETLE_MODRA,
-        4: ZELENA,
-        5: TMAVE_SEDA,
-        6: SVETLE_SEDA
-    }
-
-    colors = [
-        color_map[code]
-        for code in plot_codes
-    ]
-
     return {
         "values": values,
-        "labels": plot_labels,
+        "labels": labels,
         "codes": plot_codes,
         "shares": shares,
         "colors": colors,
@@ -548,10 +624,10 @@ def load_prijmy():
     )
 
     # ========================================================
-    # NALEZENÍ ŘÁDKU PODLE KÓDU
+    # NALEZENÍ ŘÁDKU PODLE KÓDU (od řádku 'od' dál)
     # ========================================================
 
-    def najdi_radek(kod):
+    def najdi_radek(kod, od=0):
 
         kod = str(kod).strip()
 
@@ -561,7 +637,7 @@ def load_prijmy():
             + r"(?=\s|$)"
         )
 
-        for i in range(len(df)):
+        for i in range(od, len(df)):
 
             bunka = str(df.iloc[i, 1])
 
@@ -571,8 +647,17 @@ def load_prijmy():
         return None
 
     # ========================================================
-    # HODNOTA 2027
+    # HODNOTA 2027 (sloupec H)
     # ========================================================
+
+    def hodnota_radku(radek):
+
+        hodnota = df.iloc[radek, 7]
+
+        if pd.isna(hodnota):
+            return 0.0
+
+        return float(hodnota) / 1_000_000_000
 
     def hodnota_2027(kod):
 
@@ -585,24 +670,13 @@ def load_prijmy():
             )
             return 0.0
 
-        hodnota = df.iloc[radek, 7]
-
-        if pd.isna(hodnota):
-            return 0.0
-
-        return float(hodnota) / 1_000_000_000
+        return hodnota_radku(radek)
 
     # ========================================================
-    # NÁZEV PŘESNĚ PODLE SLOUPCE B
-    #
-    # Vezme text buňky ve sloupci B na řádku daného kódu
-    # (jen odstraní okrajové a zdvojené mezery). Když kód
-    # nenajde, použije záložní název ze skriptu.
+    # NÁZEV ZE SLOUPCE B (bez čísla kódu)
     # ========================================================
 
-    def nazev_z_excelu(kod, zalozni):
-
-        radek = najdi_radek(kod)
+    def nazev_radku(radek, zalozni):
 
         if radek is None:
             return zalozni
@@ -612,83 +686,186 @@ def load_prijmy():
         if pd.isna(text):
             return zalozni
 
-        return " ".join(str(text).split())
+        return bez_kodu(" ".join(str(text).split()))
+
+    def nazev_z_excelu(kod, zalozni):
+
+        return nazev_radku(najdi_radek(kod), zalozni)
 
     # ========================================================
     # HLAVNÍ SKUPINY
+    #   (kód, záložní název, barva, ruční název nebo None)
+    #   None -> název ze sloupce B (bez kódu)
     # ========================================================
 
-    labels_all = [
-        "DPFO",
-        "DPPO",
-        "Ostatní přímé daně",
-        "DPH",
-        "Zvláštní daně, poplatky a obdobná peněžitá plnění",
-        "Daně a poplatky z vybraných činností a služeb",
-        "Daně a cla ze zahraničí",
-        "Majetkové daně",
-        "Ostatní daňové příjmy",
-        "Příjem z povinného pojistného"
-    ]
-
-    main_kody = [
-        "111",
-        "112",
-        "113",
-        "1211",
-        "122, 123, 124",
-        "13",
-        "14",
-        "15",
-        "17",
-        "16"
-    ]
-
-    # Ruční přejmenování vybraných položek (kód -> název v grafu).
-    # Ostatní položky mají název přesně podle sloupce B.
-    prejmenovani = {
-        "111": "DPFO",
-        "112": "DPPO",
-        "1211": "DPH"
-    }
-
-    labels_all = [
-        prejmenovani.get(kod, nazev_z_excelu(kod, label))
-        for kod, label in zip(main_kody, labels_all)
+    hlavni = [
+        ("111", "DPFO", MODRA, "DPFO"),
+        ("112", "DPPO", CERVENA, "DPPO"),
+        ("113", "Ostatní přímé daně", TMAVE_SEDA, None),
+        ("1211", "DPH", SVETLE_MODRA, "DPH"),
+        ("122, 123, 124", "Zvláštní daně, poplatky a obdobná peněžitá plnění", ZELENA,
+         "Zvláštní daně, poplatky a obdobná peněžitá plnění"),   # zkrácený název
+        ("13", "Daně a poplatky z vybraných činností a služeb", SEDA, None),
+        ("14", "Daně a cla ze zahraničí", ZLATA, None),
+        ("15", "Majetkové daně", SVETLE_SEDA, None),
+        ("17", "Ostatní daňové příjmy", TMAVE_SEDA, None),
+        ("16", "Příjem z povinného pojistného", TMAVE_MODRA, None),
     ]
 
     # ========================================================
-    # HODNOTY
+    # DETAIL SKUPINY 13
+    #
+    # Podpoložky 132–138 se berou z bloku POD řádkem 13
+    # (v Excelu řádky 29–35) – jen ten dává přesně součet
+    # položky 13 (v bloku nad ním má 137 jinou hodnotu).
     # ========================================================
 
-    values_all = np.array([
-        hodnota_2027(kod)
-        for kod in main_kody
-    ])
-
-    # ========================================================
-    # ODSTRANĚNÍ NUL
-    # ========================================================
-
-    mask = values_all > 0
-
-    values = values_all[mask]
-
-    labels = [
-        label
-        for label, keep in zip(labels_all, mask)
-        if keep
+    detail13 = [
+        ("132", "Provoz motorových vozidel"),
+        ("133", "Životní prostředí"),
+        ("134", "Místní poplatky"),
+        ("135", "Ostatní odvody"),
+        ("136", "Správní a soudní poplatky"),
+        ("137", "Poplatky na činnost správních úřadů"),
+        ("138", "Hazardní hry"),
     ]
 
-    codes = [
-        code
-        for code, keep in zip(main_kody, mask)
-        if keep
-    ]
+    radek13 = najdi_radek("13")
+
+    detail13_values = []
+    detail13_labels_final = []
+    detail13_kody_final = []
+
+    for kod, zalozni in detail13:
+
+        radek = (
+            najdi_radek(kod, od=radek13 + 1)
+            if radek13 is not None else None
+        )
+
+        if radek is None:
+            print(f"VAROVÁNÍ – kód {kod} pod řádkem 13 nebyl nalezen.")
+            continue
+
+        v = hodnota_radku(radek)
+
+        if v > 0:
+            detail13_values.append(v)
+            detail13_labels_final.append(nazev_radku(radek, zalozni))
+            detail13_kody_final.append(kod)
+
+    detail13_values = np.array(detail13_values)
+
+    skupina_13 = hodnota_2027("13")
+
+    skupina_16 = hodnota_2027("16")
+
+    detail13_total = detail13_values.sum()
+
+    rozdil13 = skupina_13 - detail13_total
+
+    if skupina_13 > 0:
+        detail13_shares = detail13_values / skupina_13 * 100
+    else:
+        detail13_shares = np.zeros(len(detail13_values))
+
+    # ========================================================
+    # POLOŽKY DONUTU
+    # ========================================================
+
+    values, labels, colors, codes = [], [], [], []
+
+    for kod, zalozni, barva, rucni in hlavni:
+
+        v = hodnota_2027(kod)
+
+        if v <= 0:
+            continue
+
+        if kod == "13" and ROZPAD_13:
+
+            for d_v, d_l, d_k in zip(
+                detail13_values,
+                detail13_labels_final,
+                detail13_kody_final
+            ):
+                values.append(d_v)
+                labels.append(d_l)
+                colors.append(SEDA)
+                codes.append(d_k)
+
+            continue
+
+        values.append(v)
+        labels.append(rucni or nazev_z_excelu(kod, zalozni))
+        colors.append(barva)
+        codes.append(kod)
+
+    # ========================================================
+    # NOVÁ POLOŽKA Z ŘÁDKU 46 (číslo řádku v Excelu)
+    # ========================================================
+
+    radek = RADEK_NOVA_POLOZKA - 1      # Excel čísluje od 1, pandas od 0
+
+    if radek >= len(df):
+
+        print(f"VAROVÁNÍ – řádek {RADEK_NOVA_POLOZKA} v listu neexistuje.")
+
+    else:
+
+        v = hodnota_radku(radek)
+
+        popisek = nazev_radku(
+            radek, f"Nová položka (řádek {RADEK_NOVA_POLOZKA})"
+        )
+
+        # Celé velkými písmeny -> jen první písmeno velké
+        if popisek.isupper():
+            popisek = popisek.capitalize()
+
+        # „… celkem“ na konci je v legendě zbytečné
+        popisek = re.sub(r"\s+celkem$", "", popisek)
+
+        if v > 0:
+            values.append(v)
+            labels.append(popisek)
+            colors.append(SVETLE_ZLATA)
+            codes.append(f"řádek {RADEK_NOVA_POLOZKA}")
+        else:
+            print(
+                f"VAROVÁNÍ – řádek {RADEK_NOVA_POLOZKA} "
+                f"({popisek}) nemá kladnou hodnotu ve sloupci H."
+            )
+
+    # ========================================================
+    # SLOUČENÍ MALÝCH POLOŽEK
+    # ========================================================
+
+    if SLOUCIT_POD > 0 and values:
+
+        celkem = sum(values)
+
+        male = [
+            i for i, v in enumerate(values)
+            if v / celkem * 100 < SLOUCIT_POD
+        ]
+
+        if len(male) > 1:
+
+            print(f"  Příjmy – sloučeno do „{NAZEV_SLOUCENE}“:")
+            for i in male:
+                print(f"    {format_cislo(values[i], 3):>8} mld. Kč  {labels[i]}")
+
+            values, labels, colors, codes = sluc_polozky(
+                values, labels, colors, codes, male,
+                NAZEV_SLOUCENE, ZLATA, "ostatní"
+            )
 
     # ========================================================
     # CELKEM
     # ========================================================
+
+    values = np.array(values)
 
     total = values.sum()
 
@@ -697,157 +874,12 @@ def load_prijmy():
     else:
         shares = np.zeros_like(values)
 
-    # ========================================================
-    # BARVY
-    # ========================================================
-
-    colors_all = [
-        MODRA,
-        CERVENA,
-        TMAVE_SEDA,
-        SVETLE_MODRA,
-        ZELENA,
-        SEDA,
-        ZLATA,
-        SVETLE_SEDA,
-        TMAVE_SEDA,
-        TMAVE_MODRA
-    ]
-
-    colors = [
-        color
-        for color, keep in zip(colors_all, mask)
-        if keep
-    ]
-
-    # ========================================================
-    # DETAIL SKUPINY 13
-    # ========================================================
-
-    detail13_kody = [
-        "132",
-        "133",
-        "134",
-        "135",
-        "136",
-        "137",
-        "138"
-    ]
-
-    detail13_labels = [
-        "Provoz motorových vozidel",
-        "Životní prostředí",
-        "Místní poplatky",
-        "Ostatní odvody",
-        "Správní a soudní poplatky",
-        "Poplatky na činnost správních úřadů",
-        "Hazardní hry"
-    ]
-
-    detail13_labels = [
-        nazev_z_excelu(kod, label)
-        for kod, label in zip(detail13_kody, detail13_labels)
-    ]
-
-    detail13_values_all = np.array([
-        hodnota_2027(kod)
-        for kod in detail13_kody
-    ])
-
-    mask13 = detail13_values_all > 0
-
-    detail13_values = detail13_values_all[mask13]
-
-    detail13_kody_final = [
-        kod
-        for kod, keep in zip(detail13_kody, mask13)
-        if keep
-    ]
-
-    detail13_labels_final = [
-        label
-        for label, keep in zip(detail13_labels, mask13)
-        if keep
-    ]
-
-    # ========================================================
-    # SKUPINY 13 A 16
-    # ========================================================
-
-    skupina_13 = hodnota_2027("13")
-
-    skupina_16 = hodnota_2027("16")
-
-    # ========================================================
-    # PODÍLY DETAILU 13
-    # ========================================================
-
-    if skupina_13 > 0:
-        detail13_shares = detail13_values / skupina_13 * 100
-    else:
-        detail13_shares = np.zeros(len(detail13_values))
-
-    # ========================================================
-    # KONTROLA
-    # ========================================================
-
-    detail13_total = detail13_values.sum()
-
-    rozdil13 = skupina_13 - detail13_total
-
-    # ========================================================
-    # DONUT PŘÍJMŮ: SKUPINA 13 ROZPADLÁ NA DETAIL
-    #
-    # Místo jedné výseče "Daně a poplatky z vybraných činností
-    # a služeb" se v grafu zobrazí její jednotlivé položky
-    # (132–138). Případný zbytek (skupina 13 minus součet
-    # detailu) se přidá jako "Ostatní (položka 13)", takže
-    # celkový součet se nezmění.
-    # ========================================================
-
-    graf_values = []
-    graf_labels = []
-    graf_codes = []
-    graf_colors = []
-
-    for value, label, code, color in zip(values, labels, codes, colors):
-
-        if code != "13":
-            graf_values.append(value)
-            graf_labels.append(label)
-            graf_codes.append(code)
-            graf_colors.append(color)
-            continue
-
-        for d_value, d_label, d_code in zip(
-            detail13_values,
-            detail13_labels_final,
-            detail13_kody_final
-        ):
-            graf_values.append(d_value)
-            graf_labels.append(d_label)
-            graf_codes.append(d_code)
-            graf_colors.append(SEDA)
-
-        if rozdil13 > 0.0005:
-            graf_values.append(rozdil13)
-            graf_labels.append("Ostatní (položka 13)")
-            graf_codes.append("13 – zbytek")
-            graf_colors.append(SEDA)
-
-    graf_values = np.array(graf_values)
-
-    if total > 0:
-        graf_shares = graf_values / total * 100
-    else:
-        graf_shares = np.zeros_like(graf_values)
-
     return {
-        "values": graf_values,
-        "labels": graf_labels,
-        "codes": graf_codes,
-        "shares": graf_shares,
-        "colors": graf_colors,
+        "values": values,
+        "labels": labels,
+        "codes": codes,
+        "shares": shares,
+        "colors": colors,
         "total": total,
         "skupina_13": skupina_13,
         "skupina_16": skupina_16,
@@ -1136,6 +1168,80 @@ def load_oze():
 
 
 # ============================================================
+# NAČTENÍ VÝDAJŮ NA OBRANU (% HDP)
+#
+# Stejně jako ve skriptu pro Canvu: list "Vojenské výdaje",
+# sloupec "Země" a sloupec s rokem 2025.
+# ============================================================
+
+def load_obrana():
+
+    df = pd.read_excel(
+        SOUBOR_OBRANA,
+        sheet_name=SHEET_OBRANA
+    )
+
+    # Sloupec s rokem může být v Excelu číslo i text ("2025")
+    sloupec_roku = None
+
+    for c in df.columns:
+        if str(c).strip().split(".")[0] == str(OBRANA_VYCHOZI_ROK):
+            sloupec_roku = c
+            break
+
+    if "Země" not in df.columns or sloupec_roku is None:
+        raise KeyError(
+            f"V souboru s obranou chybí sloupec 'Země' "
+            f"nebo {OBRANA_VYCHOZI_ROK}."
+        )
+
+    df["Země"] = df["Země"].astype(str).str.strip()
+    df["hodnota"] = df[sloupec_roku].map(prevod_cisla)
+
+    def hodnota_zeme(nazvy):
+
+        radky = df[df["Země"].isin(nazvy)].dropna(subset=["hodnota"])
+
+        if radky.empty:
+            raise KeyError(
+                f"V souboru s obranou chybí země {nazvy[0]!r}."
+            )
+
+        return float(radky["hodnota"].iloc[0])
+
+    cesko = hodnota_zeme([CESKO])
+    usa = hodnota_zeme(["USA", "Spojené státy"])
+
+    # ========================================================
+    # ROVNOMĚRNÁ CESTA K CÍLI
+    # ========================================================
+
+    pocet_let = OBRANA_CIL_ROK - OBRANA_VYCHOZI_ROK
+
+    roky = list(range(OBRANA_VYCHOZI_ROK, OBRANA_CIL_ROK + 1))
+
+    krok_cr = (OBRANA_CIL - cesko) / pocet_let
+    krok_usa = (OBRANA_CIL - usa) / pocet_let
+
+    cesta_cr = [cesko + krok_cr * (r - OBRANA_VYCHOZI_ROK) for r in roky]
+    cesta_usa = [usa + krok_usa * (r - OBRANA_VYCHOZI_ROK) for r in roky]
+
+    cesko_zvyrazneny = cesko + krok_cr * (
+        OBRANA_ZVYRAZNENY_ROK - OBRANA_VYCHOZI_ROK
+    )
+
+    return {
+        "cesko": cesko,
+        "usa": usa,
+        "rozdil": usa - cesko,
+        "roky": roky,
+        "cesta_cr": cesta_cr,
+        "cesta_usa": cesta_usa,
+        "cesko_zvyrazneny": cesko_zvyrazneny
+    }
+
+
+# ============================================================
 # CSS
 # ============================================================
 
@@ -1344,6 +1450,11 @@ body {
     align-items: start;
 }
 
+/* Graf obrany pod hlavní částí */
+.obrana-panel {
+    margin-top: 18px;
+}
+
 /* Sloupec s grafy pod sebou */
 .column {
     display: flex;
@@ -1547,6 +1658,9 @@ body {
 #     stejnou výšku (podle delší legendy),
 #   - automatické rozšiřování okrajů je vypnuté,
 #     takže legenda donut nezmenší.
+#
+# V legendě je za názvem podíl, např. „DPH (20,4 %)“ – tak jsou
+# vidět i podíly malých výsečí, do kterých se číslo nevejde.
 # ============================================================
 
 def create_donut(
@@ -1565,6 +1679,18 @@ def create_donut(
     colors = list(colors)
     labels = list(labels)
 
+    # Legenda: název + podíl (nezlomitelná mezera před %)
+    def s_podilem(nazvy):
+        return [
+            f"{n} ({format_procento(p)})".replace(" %", "\u00a0%")
+            for n, p in zip(nazvy, shares)
+        ]
+
+    labels_desktop = s_podilem(labels)
+
+    # Mobil: zkrátí se jen název, podíl zůstane celý
+    labels_mobil = s_podilem(zkrat_nazvy(labels, MOBIL_LEGENDA_ZNAKU))
+
     # Text bubliny po najetí myší – hotový řetězec pro každou výseč
     # (plný název je přímo v textu bubliny, aby zůstal celý
     #  i na mobilu, kde je název v legendě zkrácený)
@@ -1575,9 +1701,10 @@ def create_donut(
         for l, v, p in zip(labels, values, shares)
     ]
 
-    # Procenta do výsečí – u malých výsečí (< 2 %) se nic nepíše
+    # Procenta do výsečí – u malých výsečí se nic nepíše
+    # (podíl je v legendě)
     text_vyseci = [
-        format_procento(p) if p >= 2 else ""
+        format_procento(p) if p >= DONUT_MIN_PODIL_TEXT else ""
         for p in shares
     ]
 
@@ -1593,7 +1720,7 @@ def create_donut(
         go.Pie(
 
             values=values,
-            labels=labels,
+            labels=labels_desktop,
 
             hole=0.60,
             sort=False,
@@ -1705,12 +1832,12 @@ def create_donut(
 
     prepinani = {
         "desktop": {
-            "data": {"labels": [labels], "textfont.size": 14},
+            "data": {"labels": [labels_desktop], "textfont.size": 14},
             "layout": {"legend.font.size": 14, "title.font.size": 17}
         },
         "mobil": {
             "data": {
-                "labels": [zkrat_nazvy(labels, MOBIL_LEGENDA_ZNAKU)],
+                "labels": [labels_mobil],
                 "textfont.size": 11
             },
             "layout": {"legend.font.size": 11, "title.font.size": 15}
@@ -2262,6 +2389,227 @@ def create_bezne_kapitalove_chart(vyska):
 
 
 # ============================================================
+# GRAF 5 – OBRANA: ČESKO A USA, CESTA K 5 % HDP DO ROKU 2035
+#
+# Sloupce = rovnoměrná cesta Česka k cíli (výchozí rok a
+# zvýrazněný rok sytě červeně), červená čára = trend ČR,
+# modrá čára = USA, přerušovaná čára = cíl NATO.
+# ============================================================
+
+def create_obrana_nato_chart(obrana):
+
+    roky = obrana["roky"]
+    cesta_cr = [float(v) for v in obrana["cesta_cr"]]
+    cesta_usa = [float(v) for v in obrana["cesta_usa"]]
+
+    zvyraznit = (OBRANA_VYCHOZI_ROK, OBRANA_ZVYRAZNENY_ROK)
+
+    barvy = [
+        CERVENA if r in zvyraznit else CERVENA_2
+        for r in roky
+    ]
+
+    # Značky jen na začátku a na konci čar
+    znacky = [9 if i in (0, len(roky) - 1) else 0 for i in range(len(roky))]
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Bar(
+            x=roky,
+            y=cesta_cr,
+            width=0.68,
+            marker=dict(color=barvy, line=dict(width=0)),
+            hovertext=[
+                f"<b>{r}</b><br>Česko: {format_procento(v, 2)} HDP"
+                + ("<br>(stav)" if r == OBRANA_VYCHOZI_ROK else "<br>(potřebná úroveň)")
+                for r, v in zip(roky, cesta_cr)
+            ],
+            hovertemplate="%{hovertext}<extra></extra>"
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=roky,
+            y=cesta_cr,
+            mode="lines+markers",
+            line=dict(color=CERVENA, width=3),
+            marker=dict(size=znacky, color=CERVENA),
+            hoverinfo="skip"
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=roky,
+            y=cesta_usa,
+            mode="lines+markers",
+            line=dict(color=MODRA, width=3.5),
+            marker=dict(size=znacky, color=MODRA),
+            hovertext=[
+                f"<b>{r}</b><br>USA: {format_procento(v, 2)} HDP"
+                for r, v in zip(roky, cesta_usa)
+            ],
+            hovertemplate="%{hovertext}<extra></extra>"
+        )
+    )
+
+    # ========================================================
+    # CÍL NATO
+    # ========================================================
+
+    zacatek = OBRANA_VYCHOZI_ROK - 0.5
+    konec = OBRANA_CIL_ROK + 0.5
+
+    fig.add_shape(
+        type="line",
+        x0=zacatek, x1=konec,
+        y0=OBRANA_CIL, y1=OBRANA_CIL,
+        line=dict(color=SVETLE_SEDA, width=2, dash="dash"),
+        layer="below"
+    )
+
+    PISMO = "Arial, Segoe UI, sans-serif"
+
+    anotace = [
+        dict(
+            x=konec, y=OBRANA_CIL,
+            text=f"<b>Cíl NATO {format_cislo(OBRANA_CIL, 0)} % v roce {OBRANA_CIL_ROK}</b>",
+            xanchor="right", yanchor="bottom", yshift=4,
+            font=dict(size=13, color=SVETLE_SEDA, family=PISMO)
+        ),
+        # Popisky vlevo – stav ve výchozím roce
+        dict(
+            x=zacatek, y=obrana["usa"],
+            text=f"<b>USA {format_procento(obrana['usa'], 2)}</b>",
+            xanchor="right", xshift=-6,
+            font=dict(size=13, color=MODRA, family=PISMO)
+        ),
+        dict(
+            x=zacatek, y=obrana["cesko"],
+            text=f"<b>Česko {format_procento(obrana['cesko'], 2)}</b>",
+            xanchor="right", xshift=-6,
+            font=dict(size=13, color=CERVENA, family=PISMO)
+        ),
+        dict(
+            x=zacatek, y=(obrana["usa"] + obrana["cesko"]) / 2,
+            text=f"<b>rozdíl {format_cislo(obrana['rozdil'], 2)} p. b.</b>",
+            xanchor="right", xshift=-6,
+            font=dict(size=11, color=SVETLE_SEDA, family=PISMO)
+        ),
+        # Hodnota v zvýrazněném roce nad sloupcem
+        dict(
+            x=OBRANA_ZVYRAZNENY_ROK, y=obrana["cesko_zvyrazneny"],
+            text=f"<b>{format_procento(obrana['cesko_zvyrazneny'], 2)}</b>",
+            yanchor="bottom", yshift=8,
+            bgcolor="white",
+            font=dict(size=13, color=CERVENA, family=PISMO)
+        ),
+    ]
+
+    for a in anotace:
+        fig.add_annotation(showarrow=False, **a)
+
+    # Osa X: jen vybrané roky, zvýrazněný rok červeně
+    popisky_let = [OBRANA_VYCHOZI_ROK, OBRANA_ZVYRAZNENY_ROK, 2030, OBRANA_CIL_ROK]
+
+    ticktext = [
+        f"<b><span style='color:{CERVENA}'>{r}</span></b>"
+        if r == OBRANA_ZVYRAZNENY_ROK else f"<b>{r}</b>"
+        for r in popisky_let
+    ]
+
+    nadpis = f"Výdaje na obranu – cesta k cíli NATO {format_cislo(OBRANA_CIL, 0)} % HDP"
+
+    fig.update_layout(
+
+        title=dict(
+            text=nadpis,
+            x=0,
+            xanchor="left",
+            **TITULEK_POZICE,
+            font=dict(size=17, color=TEXT)
+        ),
+
+        showlegend=False,
+
+        height=OBRANA_VYSKA,
+        autosize=True,
+
+        margin=dict(l=10, r=15, t=TITULEK_VYSKA + 10, b=40),
+
+        separators=", ",
+
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+
+        xaxis=dict(
+            range=[OBRANA_VYCHOZI_ROK - 3.7, konec + 0.1],
+            tickvals=popisky_let,
+            ticktext=ticktext,
+            tickfont=dict(size=14, color=TEXT, family=PISMO),
+            showgrid=False,
+            zeroline=False,
+            showline=False,
+            ticks=""
+        ),
+
+        yaxis=dict(
+            range=[0, OBRANA_CIL * 1.12],
+            visible=False
+        )
+
+    )
+
+    # Čára osy X jen pod sloupci
+    fig.add_shape(
+        type="line",
+        x0=zacatek, x1=konec, y0=0, y1=0,
+        line=dict(color=TEXT, width=1.4)
+    )
+
+    # ========================================================
+    # PŘEPNUTÍ DESKTOP / MOBIL
+    #   mobil: menší písmo popisků, kratší nadpis
+    # ========================================================
+
+    anotace_desktop = [a.to_plotly_json() for a in fig.layout.annotations]
+
+    anotace_mobil = []
+
+    for a in anotace_desktop:
+        a = dict(a)
+        a["font"] = dict(a["font"], size=max(9, a["font"]["size"] - 3))
+        anotace_mobil.append(a)
+
+    prepinani = {
+        "desktop": {
+            "data": {},
+            "layout": {
+                "annotations": anotace_desktop,
+                "height": OBRANA_VYSKA,
+                "title.text": nadpis,
+                "title.font.size": 17,
+                "xaxis.tickfont.size": 14
+            }
+        },
+        "mobil": {
+            "data": {},
+            "layout": {
+                "annotations": anotace_mobil,
+                "height": MOBIL_VYSKA_OBRANA,
+                "title.text": f"Obrana – cesta k {format_cislo(OBRANA_CIL, 0)} % HDP",
+                "title.font.size": 15,
+                "xaxis.tickfont.size": 10
+            }
+        }
+    }
+
+    return fig, prepinani
+
+
+# ============================================================
 # HTML KARTA
 # ============================================================
 
@@ -2505,7 +2853,7 @@ def html_deficit(graf_deficit, deficit):
 # VYTVOŘENÍ DASHBOARDU
 # ============================================================
 
-def create_dashboard_html(vydaje, prijmy, deficit, oze):
+def create_dashboard_html(vydaje, prijmy, deficit, oze, obrana):
 
     # ========================================================
     # STEJNÝ POČET ŘÁDKŮ LEGENDY PRO OBA GRAFY
@@ -2533,6 +2881,7 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
 
     # ========================================================
     # GRAF PŘÍJMŮ
+    # (obsahuje i nedaňové a kapitálové příjmy a transfery)
     # ========================================================
 
     fig_prijmy, prep_prijmy = create_donut(
@@ -2541,7 +2890,7 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
         prijmy["colors"],
         prijmy["shares"],
         prijmy["total"],
-        "Příjmy z daní a poplatků",
+        "Příjmy státního rozpočtu",
         pocet_radku
     )
 
@@ -2569,6 +2918,12 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
     fig_bk, prep_bk = create_bezne_kapitalove_chart(vyska_donutu)
 
     # ========================================================
+    # GRAF OBRANY
+    # ========================================================
+
+    fig_nato, prep_nato = create_obrana_nato_chart(obrana)
+
+    # ========================================================
     # GRAF → HTML
     # ========================================================
 
@@ -2581,40 +2936,20 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
         ]
     }
 
-    graf_vydaje = fig_vydaje.to_html(
-        full_html=False,
-        div_id="graf_vydaje",
-        include_plotlyjs="cdn",
-        config=plotly_config
-    )
+    def do_html(fig, div_id, s_knihovnou=False):
+        return fig.to_html(
+            full_html=False,
+            div_id=div_id,
+            include_plotlyjs="cdn" if s_knihovnou else False,
+            config=plotly_config
+        )
 
-    graf_prijmy = fig_prijmy.to_html(
-        full_html=False,
-        div_id="graf_prijmy",
-        include_plotlyjs=False,
-        config=plotly_config
-    )
-
-    graf_deficit = fig_deficit.to_html(
-        full_html=False,
-        div_id="graf_deficit",
-        include_plotlyjs=False,
-        config=plotly_config
-    )
-
-    graf_oze = fig_oze.to_html(
-        full_html=False,
-        div_id="graf_oze",
-        include_plotlyjs=False,
-        config=plotly_config
-    )
-
-    graf_bk = fig_bk.to_html(
-        full_html=False,
-        div_id="graf_bk",
-        include_plotlyjs=False,
-        config=plotly_config
-    )
+    graf_vydaje = do_html(fig_vydaje, "graf_vydaje", s_knihovnou=True)
+    graf_prijmy = do_html(fig_prijmy, "graf_prijmy")
+    graf_deficit = do_html(fig_deficit, "graf_deficit")
+    graf_oze = do_html(fig_oze, "graf_oze")
+    graf_bk = do_html(fig_bk, "graf_bk")
+    graf_nato = do_html(fig_nato, "graf_nato")
 
     # ========================================================
     # SKRIPT PRO PŘEPÍNÁNÍ DESKTOP / MOBIL
@@ -2630,7 +2965,8 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
         "graf_prijmy": prep_prijmy,
         "graf_deficit": prep_deficit,
         "graf_oze": prep_oze,
-        "graf_bk": prep_bk
+        "graf_bk": prep_bk,
+        "graf_nato": prep_nato
     }
 
     skript_mobil = (
@@ -2844,6 +3180,22 @@ def create_dashboard_html(vydaje, prijmy, deficit, oze):
 
 
     <!-- ==================================================
+         VÝDAJE NA OBRANU (přes celou šířku)
+         ================================================== -->
+
+    <div class="panel obrana-panel">
+
+        {graf_nato}
+
+        <div class="panel-subtitle">
+            Výdaje na obranu v % HDP, stav {OBRANA_VYCHOZI_ROK} a rovnoměrný
+            nárůst k cíli {format_cislo(OBRANA_CIL, 0)} % v roce {OBRANA_CIL_ROK}
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
          VÝVOJ DEFICITU (úplně dole)
          ================================================== -->
 
@@ -2916,6 +3268,7 @@ if __name__ == "__main__":
         (SOUBOR_PRIJMY, "s příjmy"),
         (SOUBOR_DEFICIT, "s deficitem"),
         (SOUBOR_OZE, "s obnovitelnými zdroji"),
+        (SOUBOR_OBRANA, "s výdaji na obranu"),
     ]:
 
         if not soubor.exists():
@@ -2940,12 +3293,15 @@ if __name__ == "__main__":
     print("Načítám obnovitelné zdroje...")
     oze = load_oze()
 
+    print("Načítám výdaje na obranu...")
+    obrana = load_obrana()
+
     # ========================================================
     # VYTVOŘENÍ DASHBOARDU
     # ========================================================
 
     print("Vytvářím dashboard...")
-    html = create_dashboard_html(vydaje, prijmy, deficit, oze)
+    html = create_dashboard_html(vydaje, prijmy, deficit, oze, obrana)
 
     # ========================================================
     # ULOŽENÍ
@@ -2972,9 +3328,20 @@ if __name__ == "__main__":
         )
 
     print()
-    print("Výdaje celkem (odvětvové):", format_cislo(vydaje["total"], 3), "mld. Kč")
-    print("Příjmy celkem:", format_cislo(prijmy["total"], 3), "mld. Kč")
-    print("Položka 13:", format_cislo(prijmy["skupina_13"], 3), "mld. Kč")
+    print("Výdaje (donut):")
+    for l, v, p in zip(vydaje["labels"], vydaje["values"], vydaje["shares"]):
+        print(f"  {format_cislo(v, 1):>8} mld. Kč  {format_procento(p):>7}  {l}")
+    print(f"  {format_cislo(vydaje['total'], 1):>8} mld. Kč  CELKEM")
+
+    print()
+    print("Příjmy (donut):")
+    for l, v, p in zip(prijmy["labels"], prijmy["values"], prijmy["shares"]):
+        print(f"  {format_cislo(v, 1):>8} mld. Kč  {format_procento(p):>7}  {l}")
+    print(f"  {format_cislo(prijmy['total'], 1):>8} mld. Kč  CELKEM")
+
+    print()
+    print("Položka 13:", format_cislo(prijmy["skupina_13"], 3), "mld. Kč",
+          f"(podpoložky 132–138: {format_cislo(prijmy['detail13_total'], 3)})")
     print("Položka 16:", format_cislo(prijmy["skupina_16"], 3), "mld. Kč")
 
     print()
@@ -2989,6 +3356,14 @@ if __name__ == "__main__":
         print(f"Podíl OZE ({oze['obdobi']}): Česko "
               f"{format_procento(oze['hodnoty'][oze['zeme'].index(CESKO)])}, "
               f"EU-27 {format_procento(oze['eu'])}")
+
+    print()
+    print("Výdaje na obranu (% HDP):")
+    print(f"  Česko {OBRANA_VYCHOZI_ROK}: {format_procento(obrana['cesko'], 2)}")
+    print(f"  Česko {OBRANA_ZVYRAZNENY_ROK}: "
+          f"{format_procento(obrana['cesko_zvyrazneny'], 2)} (potřebná úroveň)")
+    print(f"  USA {OBRANA_VYCHOZI_ROK}: {format_procento(obrana['usa'], 2)}")
+    print(f"  Rozdíl: {format_cislo(obrana['rozdil'], 2)} p. b.")
 
     print()
     print("Běžné / kapitálové výdaje (mld. Kč):")
